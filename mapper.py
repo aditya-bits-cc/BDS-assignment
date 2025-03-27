@@ -4,63 +4,62 @@ import json
 import re
 from datetime import datetime
 
+# Constants
 FALSE_NEWS_LABELS = {"FALSE", "PANTS ON FIRE"}
-TRUE_NEWS_NABELS = {"TRUE", "MOSTLY-TRUE"}
+TRUE_NEWS_LABELS = {"TRUE", "MOSTLY-TRUE"}
 
-# Load the stop words
+# Load stop words
 with open("stop_words.json") as f:
-    STOP_WORDS = set((json.load(f)["stop_words"]))
-    
-# Function to extract month and year
+    STOP_WORDS = set(json.load(f)["stop_words"])
+
 def extract_month_year(date_str):
+    """Extract month and year from a date string in MM/DD/YYYY format."""
     date = datetime.strptime(date_str.strip(), '%m/%d/%Y')
     return date.month, date.year
 
 def tokenize_and_filter_stop_words(text):
-    # Lowercase and split text into words
+    """Tokenize text into words, convert to lowercase, and remove stop words."""
     words = re.findall(r'\b[a-zA-Z]+\b(?:\'[a-zA-Z]+)?', text.lower())
-    # Filter out stop words
-    filtered_words = (word for word in words if word not in STOP_WORDS and len(word) > 1)
-    return filtered_words
+    return (word for word in words if word not in STOP_WORDS and len(word) > 1)
 
-# Reading input from stdin
+# Process each line from stdin
 for line in sys.stdin:
     line = line.strip()
-    # line = line.encode('utf-8').decode('unicode_escape')
-    # Parse the JSON object
+    if not line:
+        continue
+
+    # Parse JSON line
     row = json.loads(line)
-    # for row in reader:
-    headline = row['statement']
-    source = row['statement_source'].lower()
-    statement_originator = row['statement_originator'].lower()
-    posted_on = row['statement_date']
-    label = str(row['verdict']).upper()
 
-    # Count the labels
+    statement = row.get('statement', '')
+    source = row.get('statement_source', '').lower()
+    originator = row.get('statement_originator', '').lower()
+    posted_date = row.get('statement_date', '')
+    label = str(row.get('verdict', '')).upper()
+
+    # Emit general metadata
     print(f"label\t{label}")
-
-    # Count the sources
     print(f"source\t{source}")
-    
-    # Count the person who gave the statement
-    print(f"statement_originator\t{statement_originator}")
-    
-    # Extract the month-year for the posted date
-    month, year = extract_month_year(posted_on)
-    if month and year:
-        month_year = f"{month}-{year}"
-        print(f"month_year\t{month}-{year}")
+    print(f"statement_originator\t{originator}")
 
+    # Extract and emit month-year info
+    try:
+        month, year = extract_month_year(posted_date)
+        month_year = f"{month}-{year}"
+        print(f"month_year\t{month_year}")
+    except ValueError:
+        month_year = None  # Invalid date format; skip month-year output
+
+    # Emit info for false news
     if label in FALSE_NEWS_LABELS:
-        print(f"fake_news_source\t{source}") # Print source if news is fake
-        print(f"fake_news_statement_originator\t{statement_originator}") # Print statement_originator if news is fake
-        print(f"fake_news_month_year\t{month_year}")  # Print month-year Of fake news
-        
-        # Process the headline for keywords
-        words = tokenize_and_filter_stop_words(headline)
-        for word in words:
+        print(f"fake_news_source\t{source}")
+        print(f"fake_news_statement_originator\t{originator}")
+        if month_year:
+            print(f"fake_news_month_year\t{month_year}")
+        for word in tokenize_and_filter_stop_words(statement):
             print(f"false_news_keyword\t{word}")
 
-    if label in TRUE_NEWS_NABELS:
-        print(f"true_news_source\t{source}") # Source name with true or mostly-true news
-        print(f"true_news_statement_originator\t{statement_originator}") # Print statement_originator if news is true or mostly-true
+    # Emit info for true news
+    if label in TRUE_NEWS_LABELS:
+        print(f"true_news_source\t{source}")
+        print(f"true_news_statement_originator\t{originator}")
